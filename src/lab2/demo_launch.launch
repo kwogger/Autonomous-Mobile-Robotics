@@ -1,0 +1,46 @@
+<launch>
+
+ <group ns="clearpath/robots/default">  
+    <node pkg="clearpath_horizon" type="horizon.py" name="horizon" respawn="true" output="screen">
+      <!-- Uncomment the following line to manually specify serial device, rather
+	   than autodetecting between available /dev/ttyUSB devices.
+	  -->
+	<param name="port" value="/dev/ttyUSB0" />
+
+      <!-- Type of commands given: velocity_control or output_control 
+	    Output control is available on all platforms; velocity control
+		is available on feedback control platforms.
+	  -->
+     <param name="velocity_control" value="1" />
+
+      <!-- Horizon Data Subscriptions
+	    The examples shown are available on all platforms. Depending on
+		your platform's equipment, the following may also be available:
+		- velocity (commanded, not actual)
+		- differential_speed (commanded, not actual)
+		- differential_output (actual)
+		- ackermann_output (actual)
+		- platform_orientation
+		- platform_rotation
+		- encoders
+		- raw_encoders
+		- distance (for rangefinders)
+	  -->
+      <param name="data/system_status" value="10" />
+      <param name="data/safety_status" value="10" />
+      <param name ="data/raw_encoders" value="10" />
+      <param name="data/power_status" value="1" />
+    </node>
+  </group>
+
+<node pkg="grp6lab2" type="main_control.py" name="main_control"></node>
+
+
+<!--
+<node pkg="indoor_pos" type="socked_thread" name="indoor_thread" output="screen">
+</node>
+-->
+<node pkg="gpsd_client" type="gpsd_client" name="gpsd_client" output="screen">
+</node>
+
+</launch>
