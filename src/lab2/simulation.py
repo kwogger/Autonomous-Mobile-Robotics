@@ -143,7 +143,7 @@ def stanley_steering_simulation(waypts):
   x0 = np.array([0, 45 * math.pi / 180, 0])
 
   # Setup the simulation time
-  Tmax = 60 * 1.5
+  Tmax = 60*1.5
   dt = 0.001
   T = np.arange(0, Tmax, dt)
 
@@ -199,103 +199,12 @@ def stanley_steering_simulation(waypts):
   pyplot.show()
 
 
-def ekf_simulation():
-  # Discrete time step
-  dt = 0.1;
-  
-  # Initial State
-  x0 = np.array([20, -2, 3])
-  
-  # Prior
-  mu = np.array([22, -1.8, 3.5])
-  S = 1 * np.eye(3)  # covariance (Sigma)
-  
-  # Discrete motion model
-  Ad = np.array([[1, dt, 0], [0, 1, 0], [0, 0, 1]])
-
-  R = 1.0e-4 * np.eye(3)
-  Re, RE = np.linalg.eig(R)
-  # Measurement model defined below
-  Q = .0001
-  
-  # Simulation Initializations
-  Tf = 10
-  T = np.arange(0, Tf, dt)
-  n = len(Ad[0])
-  x = np.zeros((n, len(T)))
-  x[:, 0] = x0
-  m = 1 #len(Q[:, 0])
-  y = np.zeros((m, len(T)))
-  mup_S = np.zeros((n, len(T)))
-  mu_S = np.zeros((n, len(T)))
-  K_S = np.zeros((n, len(T)))
-
-  Re = np.array(1.0e-4*np.eye(3))
-  RE = np.array(np.eye(3))
-
-  # Main loop
-  for t in xrange(1, len(T)):
-    # Simulation
-    # Select a motion disturbance
-    e = np.dot(np.dot(RE, np.sqrt(Re)), np.random.randn(n, 1))
-    # Update state
-    x[:, t] = np.dot(Ad, x[:, t - 1]) + e.T
-
-    # Take measurement
-    # Select a motion disturbance
-    d = np.dot(np.sqrt(Q), np.random.randn(m, 1))
-    # Determine measurement
-    y[:, t] = np.sqrt(x[0, t] ** 2 + x[2, t] ** 2) + d
-
-    # Extended Kalman Filter Estimation
-    # Prediction update
-    mup = np.dot(Ad, mu)
-    Sp = np.dot(np.dot(Ad, S), Ad.T) + R
-
-    # Linearization
-    Ht = np.array([[mup[0] / np.sqrt(mup[0] ** 2 + mup[2] ** 2), 0, mup[2] / np.sqrt(mup[0] ** 2 + mup[2] ** 2)]])
-    # Measurement update
-    #K = np.dot(np.dot(Sp, Ht.T), np.linalg.inv(np.dot(np.dot(Ht, Sp), Ht.T) + Q))
-    K = np.dot(np.dot(Sp, Ht.T), 1/(np.dot(np.dot(Ht, Sp), Ht.T) + Q))
-    mu = mup + np.dot(K, (y[:, t] - np.sqrt(mup[0] ** 2 + mup[2] ** 2)))
-    S = np.dot((np.eye(n) - np.dot(K, Ht)), Sp)
-
-    # Store results
-    mup_S[:, t] = mup
-    mu_S[:, t] = mu
-    K_S[:, t] = K.T
-
-
-    # Plot results
-    pyplot.figure(1)
-    pyplot.clf()
-    pyplot.hold(True)
-
-    pyplot.plot(0, 0, 'bx', markersize=6, linewidth=2)
-    pyplot.plot([20, -1], [0, 0], 'b--')
-    pyplot.plot(x[0, 1:t], x[2, 1:t], 'ro--')
-    pyplot.plot(mu_S[0, 1:t], mu_S[2, 1:t], 'bx--')
-    #mu_pos = [mu(1) mu(3)];
-    #S_pos = [S(1, 1) S(1, 3); S(3, 1) S(3, 3)];
-    #error_ellipse(S_pos, mu_pos, 0.75);
-    #error_ellipse(S_pos, mu_pos, 0.95);
-    pyplot.title('True state and belief')
-    pyplot.axis([-1, 20, -1, 10])
-    #F[t - 1] = getframe
-  pyplot.show()
-
-
-
-
-
-
 if __name__ == '__main__':
-  ekf_simulation()
-#  waypts = [
-#      (2, 2),
-#      (2, 10),
-#      (10, 10),
-#      (10, 2),
-#      (2, 2),
-#      ]
-#  stanley_steering_simulation(waypts)
+  waypts = [
+      (2, 2),
+      (2, 10),
+      (10, 10),
+      (10, 2),
+      (2, 2),
+      ]
+  stanley_steering_simulation(waypts)

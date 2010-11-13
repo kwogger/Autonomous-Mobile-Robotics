@@ -176,6 +176,12 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
     S, Covariance of this guess
   '''
   print 'calculating ekf'
+  print 'x: %s' % str(x)
+  print 'y: %s' % str(y)
+  print 'S: %s' % str(S)
+  print 'Q: %s' % str(Q)
+  print 'u: %s' % str(u)
+  print 'R: %s' % str(R)
   dt = (t - prev_t).to_sec()
   print 'dt: %f' % dt
   G = G(x, u, dt)
@@ -188,9 +194,9 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   print 'Sp: %s' % str(Sp)
   #Calculate Kalman gain
   if np.isscalar(Q):
-    K = np.dot(Sp, np.dot(H.T, 1/(np.dot(H,np.dot(Sp,H.T))+Q)))
+    K = np.dot(Sp, np.dot(H.T, 1 / (np.dot(H, np.dot(Sp, H.T)) + Q)))
   else:
-    K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H,np.dot(Sp,H.T))+Q)))
+    K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
   print 'K: %s' % str(K)
   return {
       'K': K,
@@ -199,33 +205,59 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
       'prev_t': t,
       }
 
+def frange(start, end=None, inc=None):
+  "A range function, that does accept float increments..."
 
-def inversescanner(grid, grid_0, x, y, theta, meas_phi, meas_r, rmax, alpha, beta):
+  if end == None:
+    end = start + 0.0
+    start = 0.0
+
+  if inc == None:
+    inc = 1.0
+
+  L = []
+  while 1:
+    next = start + len(L) * inc
+    if inc > 0 and next >= end:
+      break
+    elif inc < 0 and next <= end:
+      break
+    L.append(next)
+        
+  return L
+
+
+def inversescanner(grid, x, y, theta, phi_min, phi_inc, meas_r, rmax, alpha, beta):
   '''Calculates inverse measurement model for laser scanner.
      Identifies 3 regions of 0.4 (object unlikely), 0.5 (no new info)
-	 and 0.6 (object likely).
-	 Args (all in grid coordinates):
-	 grid: occupancy grid of size M by N.
-	 grid_0: original occupancy grid, for logit purposes
-	 x,y,theta: current robot states (in grid coordinates).
-	 meas_phi,meas_r: list of last scan
-	 rmax: max range after which we determine object to not exist
-	 alpha: distance tolerance around measurement to exclude
-	 beta: angle tolerance around measurement to exlude (in rads)
-	 '''
+   and 0.6 (object likely).
+   Args (all in grid coordinates):
+   grid: occupancy grid of size M by N.
+   grid_0: original occupancy grid, for logit purposes
+   x,y,theta: current robot states (in grid coordinates).
+   meas_phi,meas_r: list of last scan
+   rmax: max range after which we determine object to not exist
+   alpha: distance tolerance around measurement to exclude
+   beta: angle tolerance around measurement to exlude (in rads)
+   '''
   # taking constants out so we don't have to calculate them over and over
   logit_5 = math.log(1) #log(1) is zero, does it really need to be calculated?
   logit_6 = math.log(0.6 / 0.4)
   logit_4 = math.log(0.4 / 0.6)
-
+  
   #Voodoo to make us not be schmucks, so we ignore grid cells we can't see.
-  j_start = max(0, x-rmax)
-  j_stop = min(xrange(grid), x+rmax)
-  i_start = max(0,y-rmax)
-  i_stop = min(xrange(grid[0]),y+rmax)
+  j_start = max(0, x - rmax)
+  j_stop = min(50, x + rmax)
+  #j_stop = min(xrange(grid), x+rmax)
+  i_start = max(0, y - rmax)
+  i_stop = min(50, y + rmax)
+  #i_stop = min(xrange(grid[0]),y+rmax)
+  meas_phi = frange(phi_min, phi_min + phi_inc * len(meas_r), phi_inc)
 
-  for j in xrange(j_start,j_stop):
-    for i in xrange(i_start,i_stop):
+  #for j in xrange(j_start,j_stop):
+    #for i in xrange(i_start,i_stop):
+  for j in xrange(0, 50):
+    for i in xrange(0, 50):
       # for each array cell
       # find range and bearing to the current cell
       r = math.sqrt((i - y) * (i - y) + (j - x) * (j - x))
@@ -236,25 +268,21 @@ def inversescanner(grid, grid_0, x, y, theta, meas_phi, meas_r, rmax, alpha, bet
       # find index of closest measurement to cell
       ri = rmax
       min_delta_phi = 361
-      for k in xrange(meas_phi):
+      for k in xrange(len(meas_phi)):
         if abs(phi - meas_phi[k]) < min_delta_phi:
           min_delta_phi = abs(phi - meas_phi[k])
           ri = meas_r[k]
 
       # calculate probability
       # check range
-      if ri < (r-alpha) or min_delta_phi > beta:
+      if ri < (r - alpha) or min_delta_phi > beta:
         grid[j][i] += logit_5
+        #print i,',',j,',',min_delta_phi,',',phi,',',ri,',',r
       # if range measurement in cell, mark likely
       elif ri < rmax and abs(r - ri) < alpha:
         grid[j][i] += logit_6
       # otherwise empty
       else:
         grid[j][i] += logit_4
-      """
-      # update current belief
-      grid0[j][i] = p + grid[j][i] - grid_0[j][i]
-      """ 
   return grid
-    
 

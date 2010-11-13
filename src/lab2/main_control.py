@@ -18,7 +18,7 @@ from geometry_msgs.msg import Twist
 from gps_common.msg import GPSFix
 from gps_common.msg import GPSStatus
 from indoor_pos.msg import ips_msg
-#from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 
 
@@ -28,11 +28,11 @@ msg_buffer = deque(maxlen=10)
 
 # Robot Driving Constants
 VELOCITY_STICTION_OFFSET = 18
-DRIVING_DISTANCE = 2.0
+DRIVING_DISTANCE = 10.0
 ROBOT_LENGTH = 0.238
 
 # Debugging Constants
-CSV_FILES = ['gps', 'ekf']
+CSV_FILES = ['gps', 'ekf', 'lidar', 'enc', 'pid']
 CSV_FOLDER = '/home/administrator/'
 
 # PID Constants
@@ -42,11 +42,6 @@ K_I = 50
 K_D = 3
 
 # EKF Constants
-ekf_state = {
-    'K': None,
-    'mu': None,
-    'S': None,
-    }
 EKF_CONSTS = {
 #    'R': np.array([
 #        [0.14162522524774, 0.0135871726258, -0.01885776500978],
@@ -73,28 +68,28 @@ EKF_CONSTS_GPS = {
     'Q': np.array([
         [4.22603233, 8.1302549, -0.05544],
         [8.13025, 16.192, -0.10088],
-        [-0.05544, -0.10088, 0.003102]
+        [-0.05544, -0.10088, 0.003102],
         ]),
     'H': lambda mu_p: np.array([[
-        [1 / (6365 * (mu_p[0] ^ 2 / 6365 ^ 2)), 0, 0],
-        [0, 1 / (6365 * (mu_p[1] ^ 2 / 6365 ^ 2)), 0],
-        [0, 0, 1],
+        1 / (6365 * (mu_p[0] ** 2 / 6365 ** 2)),
+        1 / (6365 * (mu_p[1] ** 2 / 6365 ** 2)),
+        1,
         ]]),
     }
 h_GPS = lambda lat_orig, long_orig: lambda mu_p: np.array([
     np.arcsin(mu_p[0] / 6365) + lat_orig,
     np.arcsin(mu_p[1] / 6365) + long_orig,
-    mu_p[3],
+    mu_p[2],
     ])
 EKF_CONSTS_GPS.update(EKF_CONSTS)
 EKF_CONSTS_ENC = {
     'Q': 0.0000380112014723476,
     'H': lambda mu_p: np.array([[
-        1/np.cos(mu_p[2]),
-        1/np.sin(mu_p[2]),
-        mu_p[0]*np.tan(mu_p[2])/np.cos(mu_p[2]),
+        1 / np.cos(mu_p[2]),
+        1 / np.sin(mu_p[2]),
+        mu_p[0] * np.tan(mu_p[2]) / np.cos(mu_p[2]),
         ]]),
-    'h': lambda mu_p: mu_p[0]/np.cos(mu_p[2])
+    'h': lambda mu_p: mu_p[0] / np.cos(mu_p[2])
     }
 EKF_CONSTS_ENC.update(EKF_CONSTS)
 
@@ -137,9 +132,9 @@ def msg_buffer_callback(msg, callback_type):
 if __name__ == '__main__':
   rospy.init_node('main_control')
 
-#  lidar_sub = rospy.Subscriber(
-#      'scan', LaserScan, queue_size=1000,
-#      callback=msg_buffer_callback, callback_args=LIDAR)
+  lidar_sub = rospy.Subscriber(
+      'scan', LaserScan, queue_size=1000,
+      callback=msg_buffer_callback, callback_args=LIDAR)
   gps_sub = rospy.Subscriber(
       'fix', GPSFix, queue_size=1000,
       callback=msg_buffer_callback, callback_args=GPS_FIX)
@@ -152,6 +147,10 @@ if __name__ == '__main__':
 #  ips_sub = rospy.Subscriber(
 #      'indoor_pos', ips_msg, queue_size=1000,
 #      callback=msg_buffer_callback, callback_args=IPS)
+
+  # lidar grids
+  grid = np.zeros((50, 50))
+  grid1 = np.zeros((50, 50))
 
   # Variables for when the robot is running
   vel_cmd = Twist()
@@ -166,7 +165,7 @@ if __name__ == '__main__':
   # EKF Data
   ekf_data = {
       'K': 0,
-      'mu': np.array([0, 0, math.pi]), # Initial state
+      'mu': np.array([0, 0, math.pi / 3]), # Initial state
       'S': np.eye(3),
       'prev_t': None,
       }
@@ -183,17 +182,18 @@ if __name__ == '__main__':
   initial_ticks = None
 
   # LIDAR Data
-  grid = np.zeros(50)
-  grid_1 = np.zeros(50)
+  grid = np.zeros((50, 50))
+  grid0 = np.zeros((50, 50))
+  ld_scale = 10
+  ld_alpha = 0.5
+  ld_beta = 0.01
 
   # Setup csv files for logging
-  #TODO(mkwan): close files at the end of the script
   csv_writers = {}
   csv_files = {}
   for csv_file in CSV_FILES:
     csv_files[csv_file] = open(CSV_FOLDER + csv_file + '.csv', 'w')
     csv_writers[csv_file] = csv.writer(csv_files[csv_file])
-
 
   # Retrieve initial GPS reading
   lat_orig = None
@@ -229,26 +229,28 @@ if __name__ == '__main__':
       cur_ticks = msg.ticks[0]
       rospy.loginfo('ENCODER:I got: [%d] as encoder ticks at [%s]',
                     cur_ticks, cur_time)
+      csv_writers['enc'].writerow([cur_time, cur_ticks])
 
       # EKF Update
-      if not pid_data['prev_ticks'] is None:
-        ekf_data = controller.ekf(
-            x=ekf_data['mu'],
-            S=ekf_data['S'],
-            prev_t=ekf_data['prev_t'],
-            y=(cur_ticks-pid_data['prev_ticks']) * controller.METER_PER_TICK,
-            t=cur_time,
-            u=np.array([
-                # steering_angle['linear_velocity_cmd'],
-                REF_SPEED,
-                steering_angle['angle']]),
-            **EKF_CONSTS_ENC) # Q, H, h, R, G, mu_p
-        print ekf_data
-        csv_writers['ekf'].writerow([cur_time, ekf_data['mu'], ekf_data['S'], 'ENC'])
+#      if not pid_data['prev_ticks'] is None:
+#        ekf_data = controller.ekf(
+#            x=ekf_data['mu'],
+#            S=ekf_data['S'],
+#            prev_t=ekf_data['prev_t'],
+#            y=(cur_ticks - pid_data['prev_ticks']) * controller.METER_PER_TICK,
+#            t=cur_time,
+#            u=np.array([
+#                # steering_angle['linear_velocity_cmd'],
+#                REF_SPEED,
+#                steering_angle['angle']]),
+#            **EKF_CONSTS_ENC) # Q, H, h, R, G, mu_p
+#        print ekf_data
+#        csv_writers['ekf'].writerow([cur_time, ekf_data['mu'], ekf_data['S'], 'ENC'])
 
       # Update the velocity with a PID controller
       pid_data.update(encoder_pid_processing(cur_time, cur_ticks, pid_data))
-
+      csv_writers['pid'].writerow([cur_time, cur_ticks, pid_data['linear_velocity_cmd']])
+  
       # Limit the movement to a specific distance
       if initial_ticks is None:
         initial_ticks = cur_ticks
@@ -272,6 +274,22 @@ if __name__ == '__main__':
                                    msg.altitude, msg.track, msg.err_track,
                                    msg.speed])
 
+      # EKF Update
+#      ekf_data = controller.ekf(
+#          x=ekf_data['mu'],
+#          S=ekf_data['S'],
+#          prev_t=ekf_data['prev_t'],
+#          y=np.array([msg.latitude, msg.longitude, msg.track]),
+#          h=h_GPS(lat_orig, long_orig),
+#          t=msg.header.stamp,
+#          u=np.array([
+#              # steering_angle['linear_velocity_cmd'],
+#              REF_SPEED,
+#              steering_angle['angle']]),
+#          **EKF_CONSTS_GPS) # Q, H, h, R, G, mu_p
+#      print ekf_data
+#      csv_writers['ekf'].writerow([cur_time, ekf_data['mu'], ekf_data['S'], msg.latitude, msg.longitude, msg.track, 'GPS'])
+
     elif callback_type == GPS_STATUS:
       # GPS Status Message Processing
       rospy.loginfo("GPS:I got: [%c] as number of visible satellites",
@@ -279,8 +297,10 @@ if __name__ == '__main__':
 
     elif callback_type == LIDAR:
       # LIDAR Message Processing
-      rospy.loginfo("LIDAR:I got: [%f] as range_min",
-                    msg.range_min)
+      rospy.loginfo("LIDAR:I got: [%f] as range_min, [%f] as range_max, [%f] as angle_max, [%f] as angle_increment",
+                    msg.range_min, msg.range_max, msg.angle_max, msg.angle_increment)
+#      ranges = np.array(msg.ranges) * ld_scale
+#      grid = controller.inversescanner(grid, 25, 10, 0, msg.angle_min, msg.angle_increment, ranges, msg.range_max * ld_scale, ld_alpha, ld_beta)
 
     # Steering controller
 #    if waypoints is None:
@@ -303,6 +323,9 @@ if __name__ == '__main__':
 
     # Publish velocity command
     vel_pub.publish(vel_cmd)
+
+  for r in grid:
+    csv_writers['lidar'].writerow(r)
 
   for csv_file in csv_files.itervalues():
     csv_file.close()
