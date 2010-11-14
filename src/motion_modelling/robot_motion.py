@@ -15,12 +15,12 @@ if __name__ == '__main__':
   x0 = np.mat([[0], [0], [0.1]])  # Initial State
   v = 1  # Speed
   w = 0.1  # Heading rate of change
-  
+
   # Noise Model (speed and heading)
   R = np.mat([[0.001, 0],
               [0, 0.05]])
   RE, Re = np.linalg.eig(R)[0]
-  
+
   n = 1000  # Samples
   x = np.mat(np.zeros((3, n)))
   # Generate Disturbances

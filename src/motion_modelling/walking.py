@@ -1,4 +1,6 @@
 '''
+Rolling polygon approximation to walking.
+
 Created on 2010-11-13
 
 @author: Michael Kwan
@@ -13,8 +15,6 @@ WIN_NAME = 'Walking Simulation'
 
 
 if __name__ == '__main__':
-  # Rolling polygon approximation to walking
-
   # Create a window and video to display and write the figure animation
   cv.NamedWindow(WIN_NAME, cv.CV_WINDOW_AUTOSIZE)
   video_writer = cv.CreateVideoWriter(
