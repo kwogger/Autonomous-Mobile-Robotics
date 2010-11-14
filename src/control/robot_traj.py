@@ -1,4 +1,6 @@
 '''
+Robot trajectories.
+
 Created on Nov 14, 2010
 
 @author: Michael Kwan
@@ -84,8 +86,6 @@ def drawcar(x, y, h=0, scale=1, fig=0):
 
 
 if __name__ == '__main__':
-  # Robot trajectories
-
   # Time
   Tmax = 10
   dt = 0.1
