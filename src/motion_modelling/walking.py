@@ -16,7 +16,6 @@ WIN_NAME = 'Walking Simulation'
 
 if __name__ == '__main__':
   # Create a window and video to display and write the figure animation
-  cv.NamedWindow(WIN_NAME, cv.CV_WINDOW_AUTOSIZE)
   video_writer = cv.CreateVideoWriter(
       'walking.avi',
       cv.CV_FOURCC('I', '4', '2', '0'),
@@ -94,15 +93,13 @@ if __name__ == '__main__':
     pyplot.plot(cm[0, 0] + l * np.sin(s + a[i]), cm[0, 1] + l * np.cos(s + a[i]), 'g')
     pyplot.axis('equal')
     pyplot.axis([-1, 6.5, -1, 3])
+    if pyplot.waitforbuttonpress(1e-9):
+      break
 
     # Write figure to file and display it on screen
     pyplot.savefig('walking.png')
     frame = cv.LoadImage('walking.png', cv.CV_LOAD_IMAGE_COLOR)
     cv.WriteFrame(video_writer, frame)
-    cv.ShowImage(WIN_NAME, frame)
-    key = cv.WaitKey(1)
-    if key == ord('q'):
-      break
 
   # Remove the PNG buffer file used for video frame writing
   os.remove('walking.png')
