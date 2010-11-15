@@ -270,7 +270,7 @@ if __name__ == '__main__':
       rospy.loginfo("GPS:I got: [%f]N,[%f]W as location",
                     msg.latitude, msg.longitude)
       # use msg.header.stamp instead of msg.time
-      csv_writers['gps'].writerow([msg.time, msg.latitude, msg.longitude,
+      csv_writers['gps'].writerow([msg.header.stamp, msg.latitude, msg.longitude,
                                    msg.altitude, msg.track, msg.err_track,
                                    msg.speed])
 
