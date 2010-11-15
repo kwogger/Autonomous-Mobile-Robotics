@@ -154,6 +154,63 @@ def stanley_steering(waypts, pt, theta, v_x, k=1):
       }
 
 
+# EKF Constants
+EKF_CONSTS = { 
+#    'R': np.array([
+#        [0.14162522524774, 0.0135871726258, -0.01885776500978],
+#        [0.0135871726258, 0.00130502292838, -0.0018274115723],
+#        [-0.01885776500978, -0.0018274115723, 0.0058360123874],
+#        ]),
+    'R': np.array([
+        [0.14162522524774, 0, 0], 
+        [0, 0.00130502292838, 0], 
+        [0, 0, 0.0058360123874],
+        ]), 
+    'G': lambda x, u, dt: np.array([
+        [1, 0, -u[0] * math.sin(x[2]) * dt],
+        [0, 1, u[0] * math.cos(x[2]) * dt],
+        [0, 0, 1], 
+        ]), 
+    'mu_p': lambda x, u, dt: np.array([
+        x[0] + u[0] * math.cos(x[2]) * dt, 
+        x[1] + u[0] * math.sin(x[2]) * dt, 
+        x[2] + ((u[0] * math.tan(u[1]) * dt) / 0.238)
+        ]), 
+    }   
+
+EKF_CONSTS_GPS = {
+    'Q': np.array([
+        [4.22603233, 8.1302549, -0.05544],
+        [8.13025, 16.192, -0.10088],
+        [-0.05544, -0.10088, 0.003102],
+        ]),
+    'H': lambda mu_p,x: np.array([
+        [1/80913.694760278, 0, 0],
+        [0, 1/111101.911587005, 0],
+        [0,0,1],
+        ]),
+    
+    'h': lambda lat_orig, long_orig: lambda mu_p,x: np.array([
+         mu_p[1]/80913.694760278 + long_orig,
+         mu_p[0]/111101.911587005 + lat_orig,
+         mu_p[2]+math.pi/2,
+         ])
+    }
+
+EKF_CONSTS_GPS.update(EKF_CONSTS)
+EKF_CONSTS_ENC = {
+    'Q': 0.0000380112014723476,
+    'H': lambda mu_p,x: np.array([[
+        x[0] + (mu_p[0]-x[0]) / np.sqrt((mu_p[0]-x[0])**2 + (mu_p[1]-x[1])**2),
+        x[1] + (mu_p[1]-x[1]) / np.sqrt((mu_p[0]-x[0])**2 + (mu_p[1]-x[1])**2),
+        0,
+        ]]),
+    'h': lambda mu_p,x: np.sqrt((mu_p[0]-x[0])**2 + (mu_p[1]-x[1])**2)
+    }
+EKF_CONSTS_ENC.update(EKF_CONSTS)
+
+
+
 def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   '''General Extended Kalman Filter algorithm.
 
@@ -175,6 +232,10 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
     mu, the best guess of current state (position x,y and heading)
     S, Covariance of this guess
   '''
+  VELOCITY_STICTION_OFFSET = 18
+  DRIVING_DISTANCE = 10.0
+  ROBOT_LENGTH = 0.238
+
   print 'calculating ekf'
   print 'x: %s' % str(x)
   print 'y: %s' % str(y)
@@ -182,13 +243,14 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   print 'Q: %s' % str(Q)
   print 'u: %s' % str(u)
   print 'R: %s' % str(R)
-  dt = (t - prev_t).to_sec()
+  dt = t-prev_t
   print 'dt: %f' % dt
+  
   G = G(x, u, dt)
   print 'G: %s' % str(G)
   mu_p = mu_p(x, u, dt)
   print 'mu_p: %s' % str(mu_p)
-  H = H(mu_p)
+  H = H(mu_p,x)
   print 'H: %s' % str(H)
   Sp = np.dot(np.dot(G, S), G.T) + R
   print 'Sp: %s' % str(Sp)
@@ -198,9 +260,10 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   else:
     K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
   print 'K: %s' % str(K)
+  print 'h: %s' % str(h(mu_p,x))
   return {
       'K': K,
-      'mu': (mu_p + np.dot(K, (y - h(mu_p))).T)[0],
+      'mu': (mu_p + np.dot(K, (y - h(mu_p,x))).T),
       'S': np.dot(np.eye(len(Sp)) - np.dot(K, H), Sp),
       'prev_t': t,
       }
@@ -233,7 +296,6 @@ def inversescanner(grid, x, y, theta, phi_min, phi_inc, meas_r, rmax, alpha, bet
    and 0.6 (object likely).
    Args (all in grid coordinates):
    grid: occupancy grid of size M by N.
-   grid_0: original occupancy grid, for logit purposes
    x,y,theta: current robot states (in grid coordinates).
    meas_phi,meas_r: list of last scan
    rmax: max range after which we determine object to not exist
@@ -254,10 +316,10 @@ def inversescanner(grid, x, y, theta, phi_min, phi_inc, meas_r, rmax, alpha, bet
   #i_stop = min(xrange(grid[0]),y+rmax)
   meas_phi = frange(phi_min, phi_min + phi_inc * len(meas_r), phi_inc)
 
-  #for j in xrange(j_start,j_stop):
-    #for i in xrange(i_start,i_stop):
-  for j in xrange(0, 50):
-    for i in xrange(0, 50):
+  for j in xrange(j_start,j_stop):
+    for i in xrange(i_start,i_stop):
+  #for j in xrange(0, 50):
+    #for i in xrange(0, 50):
       # for each array cell
       # find range and bearing to the current cell
       r = math.sqrt((i - y) * (i - y) + (j - x) * (j - x))
@@ -273,11 +335,13 @@ def inversescanner(grid, x, y, theta, phi_min, phi_inc, meas_r, rmax, alpha, bet
           min_delta_phi = abs(phi - meas_phi[k])
           ri = meas_r[k]
 
+      print 'ri = %s' % str(ri)
+
       # calculate probability
       # check range
       if ri < (r - alpha) or min_delta_phi > beta:
         grid[j][i] += logit_5
-        #print i,',',j,',',min_delta_phi,',',phi,',',ri,',',r
+        print i,',',j,',',min_delta_phi,',',phi,',',ri,',',r
       # if range measurement in cell, mark likely
       elif ri < rmax and abs(r - ri) < alpha:
         grid[j][i] += logit_6
