@@ -7,40 +7,7 @@ import math
 import numpy as np
 import controller
 from matplotlib import pyplot
-
-
-def drawbox(x, y, h, scale, fig):
-  '''This function plots a box on the fig at the specified pos, heading & scale.
-
-  Args:
-    x: The x coordinate of the box
-    y: The y coordinate of the box
-    h: The heading of the box
-    scale: The size of the box
-    fig: The figure number
-  '''
-  # Car outline
-  box = np.mat([[-1, -0.5],
-             [1, -0.5],
-             [1, 0.5],
-             [-1, 0.5],
-             [-1, -0.5]])
-
-  # Size scaling
-  box = scale * box
-
-  # Rotation matrix
-  R = np.mat([[np.cos(h), -np.sin(h)], [np.sin(h), np.cos(h)]])
-  box = (R * box.H).H
-
-  # Centre
-  box[:, 0] = box[:, 0] + x
-  box[:, 1] = box[:, 1] + y
-
-  # Plot
-  pyplot.figure(fig)
-  pyplot.plot(box[:, 0], box[:, 1], 'b', linewidth=2)
-  pyplot.axis('equal')
+from amr import draw
 
 
 def matlab_steering_simulation():
@@ -99,7 +66,7 @@ def matlab_steering_simulation():
   pyplot.plot(p[:, 0], p[:, 1], 'r')
 
   for t in xrange(0, len(T), 300):
-    drawbox(p[t, 0], p[t, 1], x[t, 1], .3, 1);
+    draw.drawbox(p[t, 0], p[t, 1], x[t, 1], .3, 1);
 
   pyplot.xlabel('x (m)')
   pyplot.ylabel('y (m)')
@@ -191,7 +158,7 @@ def stanley_steering_simulation(waypts):
   pyplot.plot([pt[0] for pt in waypts], [pt[1] for pt in waypts], 'go')
 
   for t in xrange(0, len(T), 300):
-    drawbox(p[t, 0], p[t, 1], x[t, 1], .3, 1);
+    draw.drawbox(p[t, 0], p[t, 1], x[t, 1], .3, 1);
 
   pyplot.xlabel('x (m)')
   pyplot.ylabel('y (m)')
