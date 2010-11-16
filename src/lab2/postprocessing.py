@@ -43,17 +43,17 @@ EKF_CONSTS_GPS = {
     'Q': np.array([
         [4.22603233, 8.1302549, -0.05544],
         [8.13025, 16.192, -0.10088],
-        [-0.05544, -0.10088, 0.003102],
+        [-0.05544, -0.10088, 0.003102*1e9],
         ]),
     'H': lambda mu_p, x: np.array([
-        [1 / 80913.694760278, 0, 0],
         [0, 1 / 111101.911587005, 0],
-        [0, 0, 1],
+        [1 / 80913.694760278, 0, 0],
+        [0, 0, -1],
         ]),
     'h': lambda lat_orig, long_orig: lambda mu_p, x: np.array([
-         mu_p[1] / 80913.694760278 + long_orig,
-         mu_p[0] / 111101.911587005 + lat_orig,
-         mu_p[2] + math.pi / 2,
+         mu_p[1] / 111101.911587005 + lat_orig,
+         mu_p[0] / 80913.694760278 + long_orig,
+         math.pi / 2 - mu_p[2],
          ])
     }
 EKF_CONSTS_GPS.update(EKF_CONSTS)
@@ -77,17 +77,17 @@ if __name__ == '__main__':
   gps_data = collections.deque()
 
   prev_tick = None
-  for t, tick in enc_reader:
+  for t, tick, vel_cmd, turn_cmd in enc_reader:
     if prev_tick is None:
       prev_tick = int(tick)
     else:
-      enc_data.append((float(t) / 1e9, (int(tick) - prev_tick) * controller.METER_PER_TICK))
+      enc_data.append((float(t) / 1e9, (int(tick) - prev_tick) * controller.METER_PER_TICK, float(turn_cmd)))
       prev_tick = int(tick)
-  for t, lat, long, alt, track, err_track, speed in gps_reader:
+  for t, lat, long, alt, track, err_track, speed, vel_cmd, turn_cmd in gps_reader:
     if not t == '0.0':
-      if float(track) == 0:
-        track = '60'
-      gps_data.append((float(t), float(lat), float(long), -float(track)/180*math.pi))
+#      if float(track) == 0:
+#        track = '60'
+      gps_data.append((float(t) / 1e9, float(lat), float(long), float(track) / 180 * math.pi, float(turn_cmd)))
   sorted_data = collections.deque()
   while len(enc_data) > 0 and len(gps_data) > 0:
     if enc_data[0][0] > gps_data[0][0]:
@@ -100,41 +100,42 @@ if __name__ == '__main__':
   else:
     for data in gps_data:
       sorted_data.append(data)
-  # Data has been loaded
 
   # Setup EKF
   ekf_data = {
-      'mu': np.array([0, 0, 2.618]),
+      'mu': np.array([0, 0, 0.69800502]),
       'S': np.eye(3),
       }
-  u = np.array([0.4, 0])
+#  u = np.array([0.4, 0])
   mup_data = [ekf_data['mu']]
   S_data = [ekf_data['S']]
-  prev_t = 1289249680.2
+  prev_t = 1289870797.29
 
   for data in sorted_data:
-    if len(data) == 4:
+    if len(data) == 5:
+#      continue
       ekf_data = controller.ekf(
           ekf_data['mu'],
           np.array([data[1], data[2], data[3]]),
           ekf_data['S'],
           EKF_CONSTS_GPS['Q'],
-          u,
+          np.array([0.4, data[4]]),
           EKF_CONSTS['R'],
           EKF_CONSTS['G'],
           EKF_CONSTS['mu_p'],
           EKF_CONSTS_GPS['H'],
-          EKF_CONSTS_GPS['h'](43.4722205, -80.539782833),
+          EKF_CONSTS_GPS['h'](43.4723815, -80.53945933),
           data[0],
           prev_t,
           )
     else:
+#      continue
       ekf_data = controller.ekf(
           ekf_data['mu'],
           np.array([data[1]]),
           ekf_data['S'],
           EKF_CONSTS_ENC['Q'],
-          u,
+          np.array([0.4, data[2]]),
           EKF_CONSTS['R'],
           EKF_CONSTS['G'],
           EKF_CONSTS['mu_p'],
@@ -143,7 +144,6 @@ if __name__ == '__main__':
           data[0],
           prev_t,
           )
-    ekf_data['mu'][2] = (ekf_data['mu'][2] + math.pi) % (math.pi * 2) - math.pi
     prev_t = data[0]
     mup_data.append(ekf_data['mu'])
     S_data.append(ekf_data['S'])
@@ -157,4 +157,7 @@ if __name__ == '__main__':
       [r[0] for r in mup_data],
       [r[1] for r in mup_data],
       'rx', markersize=8 , linewidth=2)
+  pyplot.axis('equal')
+  pyplot.xlabel('X-Coordinate (m)')
+  pyplot.ylabel('Y-Coordinate (m)')
   pyplot.show()

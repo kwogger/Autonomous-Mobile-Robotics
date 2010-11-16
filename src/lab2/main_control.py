@@ -229,7 +229,7 @@ if __name__ == '__main__':
       cur_ticks = msg.ticks[0]
       rospy.loginfo('ENCODER:I got: [%d] as encoder ticks at [%s]',
                     cur_ticks, cur_time)
-      csv_writers['enc'].writerow([cur_time, cur_ticks])
+      csv_writers['enc'].writerow([cur_time, cur_ticks, pid_data['linear_velocity_cmd'], steering_angle['angle']])
 
       # EKF Update
 #      if not pid_data['prev_ticks'] is None:
@@ -250,10 +250,17 @@ if __name__ == '__main__':
       # Update the velocity with a PID controller
       pid_data.update(encoder_pid_processing(cur_time, cur_ticks, pid_data))
       csv_writers['pid'].writerow([cur_time, cur_ticks, pid_data['linear_velocity_cmd']])
-  
+
       # Limit the movement to a specific distance
       if initial_ticks is None:
         initial_ticks = cur_ticks
+      if cur_ticks - initial_ticks > (10.0
+                                      / controller.METER_PER_TICK):
+        steering_angle['angle'] = 10 / 180 * math.pi
+        rospy.signal_shutdown('Distance limit reached')
+      if cur_ticks - initial_ticks > (12.0
+                                      / controller.METER_PER_TICK):
+        steering_angle['angle'] = 0
       if cur_ticks - initial_ticks > (DRIVING_DISTANCE
                                       / controller.METER_PER_TICK):
         pid_data['linear_velocity_cmd'] = 0
@@ -272,7 +279,7 @@ if __name__ == '__main__':
       # use msg.header.stamp instead of msg.time
       csv_writers['gps'].writerow([msg.header.stamp, msg.latitude, msg.longitude,
                                    msg.altitude, msg.track, msg.err_track,
-                                   msg.speed])
+                                   msg.speed, pid_data['linear_velocity_cmd'], steering_angle['angle']])
 
       # EKF Update
 #      ekf_data = controller.ekf(
@@ -299,6 +306,7 @@ if __name__ == '__main__':
       # LIDAR Message Processing
       rospy.loginfo("LIDAR:I got: [%f] as range_min, [%f] as range_max, [%f] as angle_max, [%f] as angle_increment",
                     msg.range_min, msg.range_max, msg.angle_max, msg.angle_increment)
+      csv_writers['lidar'].writerow([msg.header.stamp, msg.range_min, msg.range_max, msg.angle_max, msg.angle_increment, msg.ranges, pid_data['linear_velocity_cmd'], steering_angle['angle']])
 #      ranges = np.array(msg.ranges) * ld_scale
 #      grid = controller.inversescanner(grid, 25, 10, 0, msg.angle_min, msg.angle_increment, ranges, msg.range_max * ld_scale, ld_alpha, ld_beta)
 

@@ -175,12 +175,12 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
     mu, the best guess of current state (position x,y and heading)
     S, Covariance of this guess
   '''
-  print 'calculating ekf'
+#  print 'calculating ekf'
   print 'x: %s' % str(x)
   print 'y: %s' % str(y)
 #  print 'S: %s' % str(S)
 #  print 'Q: %s' % str(Q)
-#  print 'u: %s' % str(u)
+  print 'u: %s' % str(u)
 #  print 'R: %s' % str(R)
   dt = t-prev_t
 #  print 'dt: %f' % dt
@@ -188,7 +188,7 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   G = G(x, u, dt)
 #  print 'G: %s' % str(G)
   mu_p = mu_p(x, u, dt)
-#  print 'mu_p: %s' % str(mu_p)
+  print 'mu_p: %s' % str(mu_p)
   H = H(mu_p,x)
 #  print 'H: %s' % str(H)
   Sp = np.dot(np.dot(G, S), G.T) + R
@@ -199,7 +199,7 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   else:
     K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
 #  print 'K: %s' % str(K)
-  print 'h: %s' % str(h(mu_p,x))
+#  print 'h: %s' % str(h(mu_p,x))
   return {
       'K': K,
       'mu': (mu_p + np.dot(K, (y - h(mu_p,x))).T),
