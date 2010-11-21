@@ -1,0 +1,17 @@
+<package>
+  <description brief="main_control">
+     main_control
+  </description>
+  <author>LessQQMorePewPew</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/main_control</url>
+  <depend package="std_msgs"/>
+  <depend package="rospy"/>
+  <depend package="roscpp"/>
+  <depend package="sensor_msgs"/>
+  <depend package="geometry_msgs"/>
+  <depend package="clearpath_horizon"/>
+  <depend package="indoor_pos"/>
+  <depend package="gpsd_client"/>
+</package>
