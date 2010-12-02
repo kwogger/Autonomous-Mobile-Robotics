@@ -146,8 +146,8 @@ def stanley_steering(waypts, pt, theta, v_x, k=1):
     dist = pt_to_line(pt, waypts[i], waypts[i + 1])
     if not shortest or dist['line_seg_dist'] <= shortest[0]['line_seg_dist']:
       shortest = (dist, i)
-  delta = -(angle_limiter(-theta + shortest[0]['theta']) +
-            math.atan2(k * shortest[0]['line_dist'], v_x))
+  delta = (angle_limiter(-theta + shortest[0]['theta']) +
+           math.atan2(k * shortest[0]['line_dist'], v_x))
   return {
       'angle': delta, #angle_limiter(delta),
       'waypt': shortest[1],
@@ -194,10 +194,7 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   Sp = np.dot(np.dot(G, S), G.T) + R
 #  print 'Sp: %s' % str(Sp)
   #Calculate Kalman gain
-  if np.isscalar(Q):
-    K = np.dot(Sp, np.dot(H.T, 1 / (np.dot(H, np.dot(Sp, H.T)) + Q)))
-  else:
-    K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
+  K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
 #  print 'K: %s' % str(K)
 #  print 'h: %s' % str(h(mu_p,x))
   return {
