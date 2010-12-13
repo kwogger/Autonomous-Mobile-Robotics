@@ -51,16 +51,16 @@ def pt_to_line(pt, pt1, pt2):
     as the closest distance of the point to the line defined by the line
     segment.
   '''
-  r_numerator = ((pt[0] - pt1[0]) * (pt2[0] - pt1[0]) + 
+  r_numerator = ((pt[0] - pt1[0]) * (pt2[0] - pt1[0]) +
                  (pt[1] - pt1[1]) * (pt2[1] - pt1[1]))
-  r_denomenator = ((pt2[0] - pt1[0]) * (pt2[0] - pt1[0]) + 
+  r_denomenator = ((pt2[0] - pt1[0]) * (pt2[0] - pt1[0]) +
                    (pt2[1] - pt1[1]) * (pt2[1] - pt1[1]))
   r = r_numerator / r_denomenator
 
   px = pt1[0] + r * (pt2[0] - pt1[0])
   py = pt1[1] + r * (pt2[1] - pt1[1])
 
-  s = ((pt1[1] - pt[1]) * (pt2[0] - pt1[0]) - 
+  s = ((pt1[1] - pt[1]) * (pt2[0] - pt1[0]) -
        (pt1[0] - pt[0]) * (pt2[1] - pt1[1])) / r_denomenator
 
   line_dist = s * math.sqrt(r_denomenator)
@@ -73,9 +73,9 @@ def pt_to_line(pt, pt1, pt2):
   if r >= 0 and r <= 1:
     distanceSegment = distanceLine
   else:
-    dist1 = ((pt[0] - pt1[0]) * (pt[0] - pt1[0]) + 
+    dist1 = ((pt[0] - pt1[0]) * (pt[0] - pt1[0]) +
              (pt[1] - pt1[1]) * (pt[1] - pt1[1]))
-    dist2 = ((pt[0] - pt2[0]) * (pt[0] - pt2[0]) + 
+    dist2 = ((pt[0] - pt2[0]) * (pt[0] - pt2[0]) +
              (pt[1] - pt2[1]) * (pt[1] - pt2[1]))
     if dist1 < dist2:
       xx = pt1[0];
@@ -125,10 +125,10 @@ def stanley_steering(waypts, pt, theta, v_x, k=1):
     dist = pt_to_line(pt, waypts[i], waypts[i + 1])
     if not shortest or dist['line_seg_dist'] <= shortest[0]['line_seg_dist']:
       shortest = (dist, i)
-  delta = -(angle_limiter(-theta + shortest[0]['theta']) + 
+  delta = -(angle_limiter(-theta + shortest[0]['theta']) +
             math.atan2(k * shortest[0]['line_dist'], v_x))
   return {
-      'angle': delta, #angle_limiter(delta),
+      'angle': delta,
       'waypt': shortest[1],
       }
 
@@ -154,115 +154,63 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
     mu, the best guess of current state (position x,y and heading)
     S, Covariance of this guess
   '''
-  print 'calculating ekf'
-  print 'x: %s' % str(x)
-  print 'y: %s' % str(y)
-  print 'S: %s' % str(S)
-  print 'Q: %s' % str(Q)
-  print 'u: %s' % str(u)
-  print 'R: %s' % str(R)
+#  print 'calculating ekf'
+#  print 'x: %s' % str(x)
+#  print 'y: %s' % str(y)
+#  print 'S: %s' % str(S)
+#  print 'Q: %s' % str(Q)
+#  print 'u: %s' % str(u)
+#  print 'R: %s' % str(R)
   dt = t - prev_t
-  print 'dt: %f' % dt
+#  print 'dt: %f' % dt
   G = G(x, u, dt)
-  print 'G: %s' % str(G)
+#  print 'G: %s' % str(G)
   mu_p = mu_p(x, u, dt)
-  print 'mu_p: %s' % str(mu_p)
+#  print 'mu_p: %s' % str(mu_p)
   H = H(mu_p, x)
-  print 'H: %s' % str(H)
+#  print 'H: %s' % str(H)
   Sp = np.dot(np.dot(G, S), G.T) + R
-  print 'Sp: %s' % str(Sp)
+#  print 'Sp: %s' % str(Sp)
   #Calculate Kalman gain
-  if np.isscalar(Q):
-    K = np.dot(Sp, np.dot(H.T, 1 / (np.dot(H, np.dot(Sp, H.T)) + Q)))
-  else:
-    K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
-  print 'K: %s' % str(K)
-  print 'h: %s' % str(h(mu_p, x))
+  K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
+#  print 'K: %s' % str(K)
+#  print 'h: %s' % str(h(mu_p, x))
   return {
       'K': K,
-      'mu': (mu_p + np.dot(K, (y - h(mu_p, x))).T)[0],
+      'mu': (mu_p + np.dot(K, (y - h(mu_p, x))).T),
       'S': np.dot(np.eye(len(Sp)) - np.dot(K, H), Sp),
       'prev_t': t,
       }
 
-def frange(start, end=None, inc=None):
-  "A range function, that does accept float increments..."
 
-  if end == None:
-    end = start + 0.0
-    start = 0.0
+def inversescanner(M, N, x, y, theta, meas_phi, meas_r, rmax, alpha, beta):
+  # Calculates the inverse measurement model for a laser scanner
+  # Identifies three regions, the first where no new information is
+  # available, the second where objects are likely to exist and the third
+  # where objects are unlikely to exist
 
-  if inc == None:
-    inc = 1.0
+  # Range finder inverse measurement model
+  m = np.zeros((M, N))
+  for i in xrange(M):
+    for j in xrange(N):
+      # Find range and bearing to the current cell
+      r = math.sqrt((i - x) ** 2 + (j - y) ** 2)
+      phi = math.fmod(math.atan2(j - y, i - x) - theta + math.pi, 2 * math.pi) - math.pi
 
-  L = []
-  while 1:
-    next = start + len(L) * inc
-    if inc > 0 and next >= end:
-      break
-    elif inc < 0 and next <= end:
-      break
-    L.append(next)
+      # Find the applicable range measurement 
+      k = np.argmin(abs(phi - meas_phi))
 
-  return L
+      # If out of range, or behind range measurement, or outside of field
+      # of view, no new information is available
+      if (r > min(rmax, meas_r[k] + alpha / 2.0)) or (abs(phi - meas_phi[k]) > beta / 2.0):
+        m[i, j] = 0.5
 
+      # If the range measurement was in this cell, likely to be an object
+      elif (meas_r[k] < rmax) and (abs(r - meas_r[k]) < alpha / 2.0):
+        m[i, j] = 0.6
 
-def inversescanner(grid, x, y, theta, phi_min, phi_inc, meas_r, rmax, alpha, beta):
-  '''Calculates inverse measurement model for laser scanner.
-     Identifies 3 regions of 0.4 (object unlikely), 0.5 (no new info)
-   and 0.6 (object likely).
-   Args (all in grid coordinates):
-   grid: occupancy grid of size M by N.
-   grid_0: original occupancy grid, for logit purposes
-   x,y,theta: current robot states (in grid coordinates).
-   meas_phi,meas_r: list of last scan
-   rmax: max range after which we determine object to not exist
-   alpha: distance tolerance around measurement to exclude
-   beta: angle tolerance around measurement to exlude (in rads)
-   '''
-  # taking constants out so we don't have to calculate them over and over
-  logit_5 = math.log(1) #log(1) is zero, does it really need to be calculated?
-  logit_6 = math.log(0.6 / 0.4)
-  logit_4 = math.log(0.4 / 0.6)
-  
-  #Voodoo to make us not be schmucks, so we ignore grid cells we can't see.
-  j_start = max(0, x - rmax)
-  j_stop = min(50, x + rmax)
-  #j_stop = min(xrange(grid), x+rmax)
-  i_start = max(0, y - rmax)
-  i_stop = min(50, y + rmax)
-  #i_stop = min(xrange(grid[0]),y+rmax)
-  meas_phi = frange(phi_min, phi_min + phi_inc * len(meas_r), phi_inc)
-
-  #for j in xrange(j_start,j_stop):
-    #for i in xrange(i_start,i_stop):
-  for j in xrange(0, 50):
-    for i in xrange(0, 50):
-      # for each array cell
-      # find range and bearing to the current cell
-      r = math.sqrt((i - y) * (i - y) + (j - x) * (j - x))
-      # phi: angle difference between point and heading
-      # modded to [-pi, pi] range
-      phi = (math.atan2(j - x, i - y) - theta + math.pi) % (2 * math.pi) - math.pi
-
-      # find index of closest measurement to cell
-      ri = rmax
-      min_delta_phi = 361
-      for k in xrange(len(meas_phi)):
-        if abs(phi - meas_phi[k]) < min_delta_phi:
-          min_delta_phi = abs(phi - meas_phi[k])
-          ri = meas_r[k]
-
-      # calculate probability
-      # check range
-      if ri < (r - alpha) or min_delta_phi > beta:
-        grid[j][i] += logit_5
-        #print i,',',j,',',min_delta_phi,',',phi,',',ri,',',r
-      # if range measurement in cell, mark likely
-      elif ri < rmax and abs(r - ri) < alpha:
-        grid[j][i] += logit_6
-      # otherwise empty
-      else:
-        grid[j][i] += logit_4
-  return grid
-
+      # If the cell is in front of the range measurement, likely to be
+      # empty
+      elif r < meas_r[k]:
+        m[i, j] = 0.4
+  return m
