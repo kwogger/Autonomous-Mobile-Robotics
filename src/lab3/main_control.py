@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 '''
-Main control for Lab 2 of ME 597.
+Main control for Lab 3 of ME 597.
 
 Created on 2010-10-13
 
@@ -10,7 +10,7 @@ import controller
 import csv
 import math
 import numpy as np
-import roslib; roslib.load_manifest('grp6lab2')
+import roslib; roslib.load_manifest('lab3')
 import rospy
 from clearpath_horizon.msg import RawEncoders
 from collections import deque
@@ -30,7 +30,7 @@ DRIVING_DISTANCE = 10.0
 ROBOT_LENGTH = 0.238
 
 # Debugging Constants
-CSV_FILES = ['gps', 'ekf', 'enc', 'pid']
+CSV_FILES = ['gps', 'ekf', 'enc', 'pid', 'ekf_est']
 CSV_FOLDER = '/home/administrator/'
 
 # PID Constants
@@ -153,7 +153,7 @@ if __name__ == '__main__':
   # EKF Data
   ekf_data = {
       'K': 0,
-      'mu': np.array([0, 0, math.pi / 3]), # Initial state
+      'mu': np.array([0, 0, math.pi]), # Initial state
       'S': np.eye(3),
       'prev_t': None,
       }
@@ -167,6 +167,14 @@ if __name__ == '__main__':
       'prev_error': 0,
       'linear_velocity_cmd': 0,
       }
+  initial_ticks = None
+
+  # Steering Data
+  waypts = [(0, 0)]
+  waypoints = csv.reader(open('/home/administrator/path_wave.csv', 'rb'), delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+  for row in waypoints:
+    waypts.append(row)
+  waypt = 0
 
   # Setup csv files for logging
   csv_writers = {}
@@ -191,7 +199,7 @@ if __name__ == '__main__':
       long_orig = msg.longitude
       ekf_data['prev_t'] = msg.header.stamp.to_sec()
   print 'Found GPS fix'
-
+  
   # MAIN LOOP
   while not rospy.is_shutdown():
     # If the message buffer is empty sleep and then re-loop
@@ -215,7 +223,7 @@ if __name__ == '__main__':
       if not pid_data['prev_ticks'] is None:
         ekf_data = controller.ekf(
           x=ekf_data['mu'],
-          y=(cur_ticks - pid_data['prev_ticks']) * controller.METER_PER_TICK,
+          y=np.array([(cur_ticks - pid_data['prev_ticks']) * controller.METER_PER_TICK]),
           S=ekf_data['S'],
           u=np.array([
               REF_SPEED,
@@ -224,12 +232,23 @@ if __name__ == '__main__':
           prev_t=ekf_data['prev_t'],
           **EKF_CONSTS_ENC)  # Q, H, h, R, G, mu_p
         csv_writers['ekf'].writerow([cur_time, ekf_data['mu'], ekf_data['S'], 'ENC'])
+        csv_writers['ekf_est'].writerow(ekf_data['mu'])
 
       # Update the velocity with a PID controller
       pid_data.update(encoder_pid_processing(cur_time, cur_ticks, pid_data))
       csv_writers['pid'].writerow([cur_time, cur_ticks, pid_data['linear_velocity_cmd']])
 
-      # TODO(mkwan): Add waypoint handling here
+      # Limit the movement to a specific distance
+      if initial_ticks is None:
+        initial_ticks = cur_ticks
+      if cur_ticks - initial_ticks > (20.0 / controller.METER_PER_TICK):
+        pid_data['linear_velocity_cmd'] = 0
+        rospy.signal_shutdown('Distance limit reached')
+      # Stop when the final waypoint is reached... ish.
+      if math.sqrt((ekf_data['mu'][0] - waypts[-1][0])**2 + (ekf_data['mu'][1] - waypts[-1][1])**2)<1:
+        pid_data['linear_velocity_cmd'] = 0
+        rospy.signal_shutdown('Final Waypoint reached')
+
 
     elif callback_type == GPS_FIX:
       # GPS Fix Message Processing
@@ -252,7 +271,8 @@ if __name__ == '__main__':
           t=msg.header.stamp.to_sec(),
           prev_t=ekf_data['prev_t'],
           **EKF_CONSTS_GPS)  # Q, H, R, G, mu_p
-      csv_writers['ekf'].writerow([cur_time, ekf_data['mu'], ekf_data['S'], msg.latitude, msg.longitude, msg.track, 'GPS'])
+      csv_writers['ekf'].writerow([msg.header.stamp, ekf_data['mu'], ekf_data['S'], msg.latitude, msg.longitude, msg.track, 'GPS'])
+      csv_writers['ekf_est'].writerow(ekf_data['mu'])
 
     elif callback_type == GPS_STATUS:
       # GPS Status Message Processing
@@ -260,10 +280,14 @@ if __name__ == '__main__':
                     msg.satellites_visible)
 
     # Steering controller
-#    if waypoints is None:
-#      waypoints = [((msg.latitude-lat_orig)*111101.911, (msg.longitude-long_orig)*80913.6947), (0, 0), (-10, 10)]
-#    if not prev_velocity is None:
-#      steering_angle = controller.stanley_steering(waypoints, (((msg.latitude-lat_orig)*111101.911, (msg.longitude-long_orig)*80913.6947), msg.Yaw, prev_velocity, 0.01))
+    if not pid_data['prev_velocity'] is None:
+      steering_angle = controller.stanley_steering(
+          waypts,
+          (ekf_data['mu'][0], ekf_data['mu'][1]),
+          ekf_data['mu'][2],
+          pid_data['prev_velocity'],
+          0.25)
+      steering_angle['angle'] = max(-1.0/4, min(1.0/4, steering_angle['angle']))
 
     # Set the motor commands with stiction and steering angle correction
     vel_cmd.linear.x = max(
@@ -273,10 +297,7 @@ if __name__ == '__main__':
             pid_data['linear_velocity_cmd'] > 0 else
             (pid_data['linear_velocity_cmd'] - VELOCITY_STICTION_OFFSET) if
             (pid_data['linear_velocity_cmd'] < 0) else 0))
-    if steering_angle:
-      vel_cmd.angular.z = max(-100, min(100, steering_angle['angle'] * 400 - 3))
-    else:
-      vel_cmd.angular.z = -3
+    vel_cmd.angular.z = max(-100, min(100, steering_angle['angle'] * 400 - 3))
 
     # Publish velocity command
     vel_pub.publish(vel_cmd)

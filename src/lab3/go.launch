@@ -33,19 +33,7 @@
     </node>
   </group>
 
-<node pkg="grp6lab2" type="main_control.py" name="main_control" output="screen"></node>
-
-<node name="hokuyo" pkg="hokuyo_node" type="hokuyo_node" respawn="false" output="screen">
-  
-    <!-- Starts up faster, but timestamps will be inaccurate. --> 
-    <param name="calibrate_time" type="bool" value="true"/> 
-    
-    <!-- Set the port to connect to here -->
-    <param name="port" type="string" value="/dev/ttyUSB2"/> 
-  
-    <param name="intensity" type="bool" value="false"/>
-</node>
-  
+<node pkg="lab3" type="main_control.py" name="main_control" output="screen"></node>
 
 <!--
 <node pkg="indoor_pos" type="socked_thread" name="indoor_thread" output="screen">
