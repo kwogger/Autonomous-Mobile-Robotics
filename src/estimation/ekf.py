@@ -8,7 +8,7 @@ Created on 2010-11-14
 import math
 import numpy as np
 from matplotlib import pyplot
-from amr import draw
+from amr import draw, controller
 
 
 if __name__ == '__main__':
@@ -30,10 +30,21 @@ if __name__ == '__main__':
   R = np.mat([[.0001, 0, 0],
               [0, .0001, 0],
               [0, 0, .0001]])
-  RE, Re, _ = np.linalg.eig(R)[0]
+  Re, RE = np.linalg.eig(R)
+  Re = Re * np.eye(len(Re))
+
+  mu_p = lambda mu, u, dt: Ad * mu
+  u = None
+  G = lambda mu, u, dt: Ad
 
   # Measurement model defined below
   Q = np.mat([.0001])
+
+  H = lambda mu_p, mu: np.mat([
+      (mu_p[0, 0]) / (math.sqrt(mu_p[0, 0] ** 2 + mu_p[2, 0] ** 2)),
+      0,
+      (mu_p[2, 0]) / (math.sqrt(mu_p[0, 0] ** 2 + mu_p[2, 0] ** 2))])
+  h = lambda mu_p, mu: math.sqrt(mu_p[0, 0] ** 2 + mu_p[2, 0] ** 2)
 
   # Simulation Initializations
   Tf = 10
@@ -52,7 +63,7 @@ if __name__ == '__main__':
   for t in xrange(1, len(T)):
     ## Simulation
     # Select a motion disturbance
-    e = RE * math.sqrt(Re) * np.random.randn(n, 1)
+    e = np.dot(np.dot(RE, np.sqrt(Re)), np.random.randn(n, 1))
     # Update state
     x[:, t] = Ad * x[:, t - 1] + e
 
@@ -64,19 +75,12 @@ if __name__ == '__main__':
 
 
     ## Extended Kalman Filter Estimation
-    # Prediction update
-    mup = Ad * mu
-    Sp = Ad * S * Ad.T + R
-
-    # Linearization
-    Ht = np.mat([(mup[0, 0]) / (math.sqrt(mup[0, 0] ** 2 + mup[2, 0] ** 2)),
-                 0,
-                 (mup[2, 0]) / (math.sqrt(mup[0, 0] ** 2 + mup[2, 0] ** 2))])
-
     # Measurement update
-    K = Sp * Ht.T * np.linalg.inv(Ht * Sp * Ht.T + Q)
-    mu = mup + K * (y[:, t] - math.sqrt(mup[0] ** 2 + mup[2] ** 2))
-    S = (np.eye(n) - K * Ht) * Sp
+    ekf_data = controller.ekf(mu, y[:, t], S, Q, u, R, G, mu_p, H, h, t, t - 1)
+    K = ekf_data['K']
+    mu = ekf_data['mu']
+    mup = ekf_data['mu_p']
+    S = ekf_data['S']
 
     # Store results
     mup_S[:, t] = mup
