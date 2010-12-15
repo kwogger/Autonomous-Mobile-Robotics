@@ -33,7 +33,7 @@ if __name__ == '__main__':
   Re, RE = np.linalg.eig(R)
   Re = Re * np.eye(len(Re))
 
-  mu_p = lambda mu, u, dt: Ad * mu
+  mu_p = lambda mu, u, dt: np.dot(Ad, mu)
   u = None
   G = lambda mu, u, dt: Ad
 
@@ -65,11 +65,11 @@ if __name__ == '__main__':
     # Select a motion disturbance
     e = np.dot(np.dot(RE, np.sqrt(Re)), np.random.randn(n, 1))
     # Update state
-    x[:, t] = Ad * x[:, t - 1] + e
+    x[:, t] = np.dot(Ad, x[:, t - 1]) + e
 
     # Take measurement
     # Select a motion disturbance
-    d = np.sqrt(Q) * np.random.randn(m, 1)
+    d = np.dot(np.sqrt(Q), np.random.randn(m, 1))
     # Determine measurement
     y[:, t] = math.sqrt(x[0, t] ** 2 + x[2, t] ** 2) + d
 
