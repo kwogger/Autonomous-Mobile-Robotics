@@ -7,6 +7,7 @@ Created on 2010-11-14
 '''
 import math
 import numpy as np
+from scipy import stats
 
 
 def pid(ref, cur, prev, integral, prev_e, dt, k_p, k_i, k_d):
@@ -212,6 +213,26 @@ def ekf(mu, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
       'S': np.dot(np.eye(len(Sp)) - np.dot(K, H), Sp),
       'prev_t': t,
       }
+
+
+def particle_filter(X, y, Q, u, I, Re, RE, mu_p, h, dt):
+  n = len(X)
+  w = np.zeros(I)
+  Xp = np.zeros((n, I))
+  X_1 = np.zeros(X.shape)
+
+  Xp[:, :] = mu_p(X, u, dt) + np.dot(np.dot(RE, np.sqrt(Re)), np.random.randn(n, I))
+  for i in xrange(I):
+    w[i] = stats.norm.pdf(y, h(Xp[:, i], X), np.sqrt(Q))
+  W = np.cumsum(w)
+  seed = np.dot(W[-1], np.random.rand(I))
+  for j in xrange(I):
+    X_1[:, j] = Xp[:, (W > seed[j]).nonzero()[0][0]]
+  return {
+      'X': X_1,
+      'mu': np.array([np.mean(X, axis=1)]).T,
+      'S': np.cov(X)
+      } 
 
 
 def inversescanner(M, N, x, y, theta, meas_phi, meas_r, rmax, alpha, beta):
