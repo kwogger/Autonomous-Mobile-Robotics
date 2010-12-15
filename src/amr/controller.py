@@ -133,6 +133,35 @@ def stanley_steering(waypts, pt, theta, v_x, k=1):
       }
 
 
+def kf(x, y, S, Q, u, R, A, B, C):
+  '''General Kalman Filter algorithm.
+
+  Args:
+    x: current state
+    y: sensor reading
+    S: covariance of the current state
+    Q: covariance of the sensor reading
+    u: latest control input
+    R: covariance of the command
+    A: Motion model state gain
+    B: Motion model input gain
+    C: Measurement model gain
+
+  Returns:
+    mu, the best guess of current state (position x,y and heading)
+    S, Covariance of this guess
+  '''
+  mu_p = np.dot(A, x) + np.dot(B, u)
+  S_p = np.dot(np.dot(A, S), A.T) + R
+  # Calculate Kalman gain
+  K = np.dot(np.dot(S_p, C.T), np.linalg.inv(np.dot(np.dot(C, S_p), C.T)) + Q)
+  return {
+      'K': K,
+      'mu': mu_p + np.dot(K, y - np.dot(C, mu_p)),
+      'S': np.dot((np.eye(len(K)) - np.dot(K, C)), S_p),
+      }
+
+
 def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   '''General Extended Kalman Filter algorithm.
 
@@ -171,7 +200,7 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
 #  print 'H: %s' % str(H)
   Sp = np.dot(np.dot(G, S), G.T) + R
 #  print 'Sp: %s' % str(Sp)
-  #Calculate Kalman gain
+  # Calculate Kalman gain
   K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
 #  print 'K: %s' % str(K)
 #  print 'h: %s' % str(h(mu_p, x))
