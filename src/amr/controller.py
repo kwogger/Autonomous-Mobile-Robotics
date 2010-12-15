@@ -133,11 +133,11 @@ def stanley_steering(waypts, pt, theta, v_x, k=1):
       }
 
 
-def kf(x, y, S, Q, u, R, A, B, C):
+def kf(mu, y, S, Q, u, R, A, B, C):
   '''General Kalman Filter algorithm.
 
   Args:
-    x: current state
+    mu: current state
     y: sensor reading
     S: covariance of the current state
     Q: covariance of the sensor reading
@@ -151,22 +151,23 @@ def kf(x, y, S, Q, u, R, A, B, C):
     mu, the best guess of current state (position x,y and heading)
     S, Covariance of this guess
   '''
-  mu_p = np.dot(A, x) + np.dot(B, u)
+  mu_p = np.dot(A, mu) + np.dot(B, u)
   S_p = np.dot(np.dot(A, S), A.T) + R
   # Calculate Kalman gain
   K = np.dot(np.dot(S_p, C.T), np.linalg.inv(np.dot(np.dot(C, S_p), C.T)) + Q)
   return {
       'K': K,
       'mu': mu_p + np.dot(K, y - np.dot(C, mu_p)),
+      'mu_p': mu_p,
       'S': np.dot((np.eye(len(K)) - np.dot(K, C)), S_p),
       }
 
 
-def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
+def ekf(mu, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
   '''General Extended Kalman Filter algorithm.
 
   Args:
-    x: current state
+    mu: current state
     y: sensor reading
     S: covariance of the current state
     Q: covariance of the sensor reading
@@ -184,7 +185,7 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
     S, Covariance of this guess
   '''
 #  print 'calculating ekf'
-#  print 'x: %s' % str(x)
+#  print 'mu: %s' % str(mu)
 #  print 'y: %s' % str(y)
 #  print 'S: %s' % str(S)
 #  print 'Q: %s' % str(Q)
@@ -192,32 +193,49 @@ def ekf(x, y, S, Q, u, R, G, mu_p, H, h, t, prev_t):
 #  print 'R: %s' % str(R)
   dt = t - prev_t
 #  print 'dt: %f' % dt
-  G = G(x, u, dt)
+  G = G(mu, u, dt)
 #  print 'G: %s' % str(G)
-  mu_p = mu_p(x, u, dt)
+  mu_p = mu_p(mu, u, dt)
 #  print 'mu_p: %s' % str(mu_p)
-  H = H(mu_p, x)
+  H = H(mu_p, mu)
 #  print 'H: %s' % str(H)
   Sp = np.dot(np.dot(G, S), G.T) + R
 #  print 'Sp: %s' % str(Sp)
   # Calculate Kalman gain
   K = np.dot(Sp, np.dot(H.T, np.linalg.inv(np.dot(H, np.dot(Sp, H.T)) + Q)))
 #  print 'K: %s' % str(K)
-#  print 'h: %s' % str(h(mu_p, x))
+#  print 'h: %s' % str(h(mu_p, mu))
   return {
       'K': K,
-      'mu': (mu_p + np.dot(K, (y - h(mu_p, x))).T),
+      'mu': mu_p + np.dot(K, (y - h(mu_p, mu))),
+      'mu_p': mu_p,
       'S': np.dot(np.eye(len(Sp)) - np.dot(K, H), Sp),
       'prev_t': t,
       }
 
 
 def inversescanner(M, N, x, y, theta, meas_phi, meas_r, rmax, alpha, beta):
-  # Calculates the inverse measurement model for a laser scanner
-  # Identifies three regions, the first where no new information is
-  # available, the second where objects are likely to exist and the third
-  # where objects are unlikely to exist
+  '''Calculates the inverse measurement model for a laser scanner.
 
+  Identifies three regions, the first where no new information is available, the
+  second where objects are likely to exist and the third where objects are
+  unlikely to exist.
+
+  Args:
+    M: The range of x of the map.
+    N: The range of y of the map.
+    x: The x-coordinate of the reference point.
+    y: The y-coordinate of the reference point.
+    theta: The heading of the reference point.
+    meas_phi: Headings of the measurements.
+    meas_r: Range of the measurements.
+    rmax: Maximum range of the measurements.
+    alpha: Distance about measurement to fill in.
+    beta: Angle beyond which to exclude.
+
+  Returns:
+    m, the occupancy grid map of the area
+  '''
   # Range finder inverse measurement model
   m = np.zeros((M, N))
   for i in xrange(M):
