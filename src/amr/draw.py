@@ -11,7 +11,7 @@ from matplotlib import pyplot
 from scipy import stats
 
 
-def drawcar(x, y, h=0, scale=1, fig=0):
+def drawcar(x, y, h=0, scale=1, fig=0, style='b'):
   '''Plots a car at position x,y heading h and size scale on figure number fig.
 
   The default x,y = (0,0), h = 0 points to the right, and scale=1 plots a car
@@ -80,8 +80,8 @@ def drawcar(x, y, h=0, scale=1, fig=0):
 
   # Plot
   pyplot.figure(fig)
-  pyplot.plot(car[:, 0], car[:, 1], 'b')
-  pyplot.plot(car[:, 0], car[:, 1], 'b')
+  pyplot.plot(car[:, 0], car[:, 1], style)
+  pyplot.plot(car[:, 0], car[:, 1], style)
   pyplot.plot(point[:, 0], point[:, 1], 'r')
   pyplot.axis('equal')
 
